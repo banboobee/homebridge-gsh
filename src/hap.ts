@@ -470,7 +470,7 @@ export class Hap {
 	  //this.log.info(televisions[0].extras);
 	}
 	//console.log(`Found television Service: ${JSON.stringify(televisions[0])}`);
-        this.services.push(televisions[0]);
+        this.services.set(televisions[0].uniqueId, televisions[0]);
       }
     });
   }
