@@ -156,9 +156,11 @@ export class Hap {
    * Start processing
    */
   async start() {
+    // this.log.info(`Building service table ....`);
     await this.getAccessories();
     await this.buildSyncResponse();
     await this.registerCharacteristicEventHandlers();
+    // this.log.info(`Found ${this.services.size} services.`)
   }
 
   /**
@@ -451,6 +453,7 @@ export class Hap {
 	if (inputs.length > 0) {
 	  televisions[0].extras = {};
 	  televisions[0].extras.channels = [];
+	  televisions[0].extras.channelAliases = this.config?.channelAliases;
 	  televisions[0].extras.inputs = [];
 	  for (const service of inputs) {
 	    let s = service.characteristics.find(x => x.type == Characteristic.ConfiguredName).value;

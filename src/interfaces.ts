@@ -11,6 +11,7 @@ export interface PluginConfig extends PlatformConfig {
   accessoryFilter?: Array<string>;
   accessorySerialFilter?: Array<string>;
   forceFahrenheit?: boolean;
+  channelAliases?: Array<{[key: string]: Array<string>}>;
 }
 
 export interface Instance {

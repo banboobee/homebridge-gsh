@@ -39,9 +39,15 @@ export class Television {
       attributes.commandOnlyChannels = true;
       attributes.availableChannels = [];
       for (const c of service.extras.channels) {
+	let n = [c.ConfiguredName], a;
+	if (a = service.extras.channelAliases?.find(x => x[c.ConfiguredName])) {
+	  for (const x of a[c.ConfiguredName]) {
+	    n.push(x);
+	  }
+	}
 	attributes.availableChannels.push({
 	  key: c.Name,
-	  names: [c.ConfiguredName],
+	  names: n,
 	  number: `${c.Identifier + 1}`,
 	});
       }
