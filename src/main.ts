@@ -7,6 +7,7 @@ import * as path from 'path';
 import { PluginConfig } from './interfaces';
 import { Log } from './logger';
 import { Hap } from './hap';
+import { HomebridgeGoogleSmartHome } from './platform';
 
 export class Plugin {
   public log: Log;
@@ -16,15 +17,15 @@ export class Plugin {
 
   public package = fs.readJsonSync(path.resolve(__dirname, '../package.json'));
 
-  constructor(log, config: PluginConfig, homebridgeConfig) {
-    this.log = new Log(log, config.debug);
-    this.config = config;
+  constructor(platform: HomebridgeGoogleSmartHome, homebridgeConfig) {
+    this.log = new Log(platform.log, platform.config.debug);
+    this.config = platform.config;
     this.homebridgeConfig = homebridgeConfig;
 
     const qs = {
       // generate unique id for service based on the username, sha256 for privacy
       deviceId: crypto.createHash('sha256').update(this.homebridgeConfig.bridge.username).digest('hex'),
-      token: config.token,
+      token: this.config.token,
       v: this.package.version,
       n: this.package.name,
     };
@@ -32,11 +33,23 @@ export class Plugin {
     // establish new websocket connection
     const socket = new WebSocket(`wss://homebridge-gsh.iot.oz.nu/socket?${querystring.stringify(qs)}`);
 
-    this.hap = new Hap(socket, this.log, this.homebridgeConfig.bridge.pin, this.config);
+    this.hap = new Hap(socket, this, this.homebridgeConfig.bridge.pin, this.config);
 
     // listen for websocket status events, connect and disconnect events, errors, etc.
     socket.on('websocket-status', (status) => {
       this.log.info(status);
+      if (status.match('Connected ')) {
+	platform.accessory.getService(platform.api.hap.Service.ContactSensor)
+	  .setCharacteristic(platform.api.hap.Characteristic.ContactSensorState,
+			     platform.api.hap.Characteristic.ContactSensorState.CONTACT_DETECTED);
+
+      } else if (status.match('Lost Connection') || status.match('Error ') ||
+		 status.match('Disconnected ') || status.match('Reconnecting ') ||
+		 status.match('Closed ')) {
+	platform.accessory.getService(platform.api.hap.Service.ContactSensor)
+	  .setCharacteristic(platform.api.hap.Characteristic.ContactSensorState,
+			     platform.api.hap.Characteristic.ContactSensorState.CONTACT_NOT_DETECTED);
+      }
     });
 
     socket.on('json', async (req) => {

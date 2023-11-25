@@ -7,6 +7,7 @@ import { debounceTime, map } from 'rxjs/operators';
 import { PluginConfig, HapInstance, HapService, HapCharacteristic, Instance } from './interfaces';
 import { toLongFormUUID } from './uuid';
 import { Log } from './logger';
+import { Plugin } from './main'
 
 import { Door } from './types/door';
 import { Fan } from './types/fan';
@@ -92,10 +93,10 @@ export class Hap {
   accessorySerialFilter: Array<string> = [];
   deviceNameMap: Array<{ replace: string; with: string }> = [];
 
-  constructor(socket, log, pin: string, config: PluginConfig) {
+  constructor(socket, plugin: Plugin, pin: string, config: PluginConfig) {
     this.config = config;
     this.socket = socket;
-    this.log = log;
+    this.log = plugin.log;
     this.pin = pin;
     this.services = new Map;
 
