@@ -11,9 +11,11 @@ import { PLATFORM_NAME } from './settings';
 import { hostname } from 'os';
 import fakegato from 'fakegato-history';
 import { EveHomeKitTypes } from 'homebridge-lib';
+import { Plugin } from './main';
 
 export class HomebridgeGoogleSmartHome {
   public accessory: PlatformAccessory;
+  public plugin: Plugin;
   private cachedAccessories: PlatformAccessory[] = [];
   private fakegatoAPI: any;
   private eve: any;
@@ -41,7 +43,7 @@ export class HomebridgeGoogleSmartHome {
   }
 
   async start() {
-    const { Plugin } = await import('./main');
+    //const { Plugin } = await import('./main');
     const google = 'Google Smart Home';
     const homebridgeConfig = await fs.readJson(path.resolve(this.api.user.configPath()));
     const uuid = this.api.hap.uuid.generate(`${google}`);
@@ -59,31 +61,50 @@ export class HomebridgeGoogleSmartHome {
       .setCharacteristic(this.api.hap.Characteristic.Manufacturer, PLATFORM_NAME)
       .setCharacteristic(this.api.hap.Characteristic.SerialNumber, hostname())
       .setCharacteristic(this.api.hap.Characteristic.FirmwareRevision, version);
-    const service = this.accessory.getService(this.api.hap.Service.ContactSensor) ||
-	            this.accessory.addService(this.api.hap.Service.ContactSensor);
-    service.setCharacteristic(this.api.hap.Characteristic.ContactSensorState,
-			      this.api.hap.Characteristic.ContactSensorState.CONTACT_NOT_DETECTED);
+    const sync = this.accessory.getService(this.api.hap.Service.Switch) ||
+                 this.accessory.addService(this.api.hap.Service.Switch, `${google} Sync`);
+    sync.getCharacteristic(this.api.hap.Characteristic.On)
+      .onGet(() => false)
+      .onSet(async (on: CharacteristicValue) => {
+	if (on === true) {
+	  await this.plugin.hap.requestSync();
+	  setTimeout(() => {
+	    this.accessory.getService(this.api.hap.Service.Switch)
+	      .updateCharacteristic(this.api.hap.Characteristic.On, false);
+	  }, 1000);
+	}
+      });
+
+    const contact = this.accessory.getService(this.api.hap.Service.ContactSensor) ||
+	            this.accessory.addService(this.api.hap.Service.ContactSensor, `${google} Contact`);
+    contact.setCharacteristic(this.api.hap.Characteristic.ContactSensorState,
+			     this.api.hap.Characteristic.ContactSensorState.CONTACT_NOT_DETECTED);
     this.historyService = new this.fakegatoAPI('door', this.accessory,
 	       {log: this.log, storage: 'fs',
-		filename: `${hostname().split(".")[0]}_${this.accessory.displayName}_persist.json`
+		filename: `${hostname().split(".")[0]}_${PLUGIN_NAME}_persist.json`
 	       });
-    service.addOptionalCharacteristic(this.eve.Characteristics.OpenDuration);
-    service.getCharacteristic(this.eve.Characteristics.OpenDuration).onGet(() => 0);
-    service.addOptionalCharacteristic(this.eve.Characteristics.ClosedDuration);
-    service.getCharacteristic(this.eve.Characteristics.ClosedDuration).onGet(() => 0);
-    service.addOptionalCharacteristic(this.eve.Characteristics.TimesOpened);
-    service.getCharacteristic(this.eve.Characteristics.TimesOpened)
+    this.historyService.addEntry(
+      {time: Math.round(new Date().valueOf()/1000),
+       status: this.api.hap.Characteristic.ContactSensorState.CONTACT_NOT_DETECTED
+      });
+    
+    contact.addOptionalCharacteristic(this.eve.Characteristics.OpenDuration);
+    contact.getCharacteristic(this.eve.Characteristics.OpenDuration).onGet(() => 0);
+    contact.addOptionalCharacteristic(this.eve.Characteristics.ClosedDuration);
+    contact.getCharacteristic(this.eve.Characteristics.ClosedDuration).onGet(() => 0);
+    contact.addOptionalCharacteristic(this.eve.Characteristics.TimesOpened);
+    contact.getCharacteristic(this.eve.Characteristics.TimesOpened)
       .onGet(() => this.accessory.context.timesOpened || 0);
-    service.addOptionalCharacteristic(this.eve.Characteristics.LastActivation);
-    service.getCharacteristic(this.eve.Characteristics.LastActivation)
+    contact.addOptionalCharacteristic(this.eve.Characteristics.LastActivation);
+    contact.getCharacteristic(this.eve.Characteristics.LastActivation)
       .onGet(() => {
 	const lastActivation = this.accessory.context.lastActivation ?
 	      Math.max(0, this.accessory.context.lastActivation - this.historyService.getInitialTime()) : 0;
 	//this.log.debug(`Get LastActivation ${this.accessory.displayName}: ${lastActivation}`);
 	return lastActivation;
       });
-    service.addOptionalCharacteristic(this.eve.Characteristics.ResetTotal);
-    service.getCharacteristic(this.eve.Characteristics.ResetTotal)
+    contact.addOptionalCharacteristic(this.eve.Characteristics.ResetTotal);
+    contact.getCharacteristic(this.eve.Characteristics.ResetTotal)
       .onSet((reset: CharacteristicValue) => {
 	const sensor = this.accessory.getService(this.api.hap.Service.ContactSensor);
         this.accessory.context.timesOpened = 0;
@@ -96,7 +117,7 @@ export class HomebridgeGoogleSmartHome {
 	return this.accessory.context.lastReset ??
 	  (this.historyService.getInitialTime() - Math.round(Date.parse('01 Jan 2001 00:00:00 GMT')/1000));
       });
-    service.getCharacteristic(this.api.hap.Characteristic.ContactSensorState)
+    contact.getCharacteristic(this.api.hap.Characteristic.ContactSensorState)
       .on('change', (event: CharacteristicChange) => {
 	if (event.newValue !== event.oldValue) {
 	  this.log.debug(`${this.accessory.displayName}: ContactSensor state on change: ${JSON.stringify(event)}`);
@@ -115,6 +136,6 @@ export class HomebridgeGoogleSmartHome {
 	}
       });
 
-    return new Plugin(this, homebridgeConfig);
+    this.plugin = new Plugin(this, homebridgeConfig);
   }
 }
