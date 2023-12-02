@@ -10,6 +10,7 @@ import { Hap } from './hap';
 import { HomebridgeGoogleSmartHome } from './platform';
 
 export class Plugin {
+  public platform: HomebridgeGoogleSmartHome;
   public log: Log;
   public config;
   public homebridgeConfig;
@@ -17,7 +18,8 @@ export class Plugin {
 
   public package = fs.readJsonSync(path.resolve(__dirname, '../package.json'));
 
-  constructor(platform: HomebridgeGoogleSmartHome, homebridgeConfig) {
+  constructor(platform, homebridgeConfig) {
+    this.platform = platform;
     this.log = new Log(platform.log, platform.config.debug);
     this.config = platform.config;
     this.homebridgeConfig = homebridgeConfig;

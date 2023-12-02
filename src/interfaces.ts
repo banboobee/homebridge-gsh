@@ -62,6 +62,7 @@ export interface HapService {
   serviceType?: string;
   instance?: Instance;
   extras?: any;
+  isUnavailable?: number;
 }
 
 export interface HapAccessory {

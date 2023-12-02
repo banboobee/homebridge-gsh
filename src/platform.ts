@@ -42,18 +42,21 @@ export class HomebridgeGoogleSmartHome {
 
   async start() {
     const { Plugin } = await import('./main');
+    const google = 'Google Smart Home';
     const homebridgeConfig = await fs.readJson(path.resolve(this.api.user.configPath()));
-    const uuid = this.api.hap.uuid.generate(`${PLUGIN_NAME}`);
+    const uuid = this.api.hap.uuid.generate(`${google}`);
     const version = fs.readJsonSync(path.resolve(__dirname, '../package.json')).version;
-    this.accessory = this.cachedAccessories.find((x) => x.UUID == uuid);
-    if (!this.accessory) {
-      this.accessory = new this.api.platformAccessory(`${PLUGIN_NAME}`, uuid);
+    if (!(this.accessory = this.cachedAccessories.find(x => x.UUID === uuid))) {
+      this.accessory = new this.api.platformAccessory(`${google}`, uuid);
+      this.accessory.context.services = {};
       this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [this.accessory]);
     }
-
+    this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME,
+		   this.cachedAccessories.filter(x => x.UUID !== uuid));
+    
     this.accessory
       .getService(this.api.hap.Service.AccessoryInformation)
-      .setCharacteristic(this.api.hap.Characteristic.Manufacturer, 'homebridge-gsh')
+      .setCharacteristic(this.api.hap.Characteristic.Manufacturer, PLATFORM_NAME)
       .setCharacteristic(this.api.hap.Characteristic.SerialNumber, hostname())
       .setCharacteristic(this.api.hap.Characteristic.FirmwareRevision, version);
     const service = this.accessory.getService(this.api.hap.Service.ContactSensor) ||
@@ -103,9 +106,9 @@ export class HomebridgeGoogleSmartHome {
             status: event.newValue
           };
           this.accessory.context.lastActivation = entry.time;
-            sensor?.updateCharacteristic(this.eve.Characteristics.LastActivation, Math.max(0, this.accessory.context.lastActivation - this.historyService.getInitialTime()));
+          sensor?.updateCharacteristic(this.eve.Characteristics.LastActivation, Math.max(0, this.accessory.context.lastActivation - this.historyService.getInitialTime()));
           if (entry.status) {
-            this.accessory.context.timesOpened++;
+	    this.accessory.context.timesOpened = (this.accessory.context.timesOpened || 0) + 1;
             sensor?.updateCharacteristic(this.eve.Characteristics.TimesOpened, this.accessory.context.timesOpened);
           }
           this.historyService.addEntry(entry);

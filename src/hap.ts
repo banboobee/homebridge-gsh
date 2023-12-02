@@ -26,12 +26,13 @@ import { Window } from './types/window';
 import { WindowCovering } from './types/window-covering';
 
 export class Hap {
+  plugin: Plugin;
   socket;
   log: Log;
   pin: string;
   config: PluginConfig;
   homebridge: HAPNodeJSClient;
-  services: Map<string, HapService>;
+  services: {[x: string]: HapService};
 
   public ready: boolean;
 
@@ -93,12 +94,14 @@ export class Hap {
   accessorySerialFilter: Array<string> = [];
   deviceNameMap: Array<{ replace: string; with: string }> = [];
 
-  constructor(socket, plugin: Plugin, pin: string, config: PluginConfig) {
+  constructor(socket, plugin, pin: string, config: PluginConfig) {
+    this.plugin = plugin;
     this.config = config;
     this.socket = socket;
     this.log = plugin.log;
     this.pin = pin;
-    this.services = new Map;
+    //this.services = {};
+    this.services = this.plugin.platform.accessory.context.services;
 
     this.accessoryFilter = config.accessoryFilter || [];
     this.accessorySerialFilter = config.accessorySerialFilter || [];
@@ -161,14 +164,14 @@ export class Hap {
     await this.getAccessories();
     await this.buildSyncResponse();
     await this.registerCharacteristicEventHandlers();
-    // this.log.info(`Found ${this.services.size} services.`)
+    // this.log.info(`Found ${Object.keys(this.services).length} services.`)
   }
 
   /**
    * Build Google SYNC intent payload
    */
   async buildSyncResponse() {
-    const devices = Array.from(this.services.values()).map((service) => {
+    const devices = Object.values(this.services).map((service) => {
       return this.types[service.serviceType].sync(service);
     });
     return devices;
@@ -192,7 +195,7 @@ export class Hap {
     const response = {};
 
     for (const device of devices) {
-      const service = this.services.get(device.id);
+      const service = this.services[device.id];
       if (service) {
         await this.getStatus(service);
         response[device.id] = this.types[service.serviceType].query(service);
@@ -214,7 +217,7 @@ export class Hap {
     for (const command of commands) {
       for (const device of command.devices) {
 
-        const service = this.services.get(device.id);
+        const service = this.services[device.id];
 
         if (service) {
 
@@ -319,7 +322,10 @@ export class Hap {
   async getAccessories() {
     return new Promise((resolve, reject) => {
       this.homebridge.HAPaccessories(async (instances: HapInstance[]) => {
-        //this.services.clear();
+        //this.services = {};
+	for (const service of Object.values(this.services)) {
+	  service.isUnavailable++;
+	}
 
         for (const instance of instances) {
           if (!await this.checkInstanceConnection(instance)) {
@@ -332,7 +338,17 @@ export class Hap {
             this.log.debug(`Instance [${instance.instance.txt.id}] on instance blacklist, ignoring.`);
           }
         }
-
+	
+	for (const service of Object.values(this.services)) {
+	  const lostlimit = 96;	// 1 day
+	  if (service.isUnavailable) {
+	    this.log.warn(`Lost service ${service.serviceName} last ${service.isUnavailable} attempts. type:${service.serviceType} address:${service.instance.ipAddress}:${service.instance.port} aid:${service.aid} iid:${service.iid}.`);
+	    if (service.isUnavailable > lostlimit) {
+	      this.log.error(`Removed service ${service.serviceName} due to exceeding lost count limit. type:${service.serviceType} address:${service.instance.ipAddress}:${service.instance.port} aid:${service.aid} iid:${service.iid}.`);
+	      delete this.services[service.uniqueId];
+	    }
+	  }
+	}
         return resolve(true);
       });
     });
@@ -376,6 +392,7 @@ export class Hap {
           service.accessoryInformation = accessoryInformation;
           service.aid = accessory.aid;
           service.serviceType = ServicesTypes[service.type];
+          service.isUnavailable = 0;
 
           service.instance = {
             ipAddress: instance.ipAddress,
@@ -406,10 +423,16 @@ export class Hap {
           }
 
           // perform user-defined service filters based on name
-          if (this.accessoryFilter.includes(service.serviceName)) {
-            this.log.debug(`Skipping ${service.serviceName} ${service.accessoryInformation['Serial Number']} - matches accessoryFilter`);
-            return;
-          }
+          // if (this.accessoryFilter.includes(service.serviceName)) {
+          //   this.log.debug(`Skipping ${service.serviceName} ${service.accessoryInformation['Serial Number']} - matches accessoryFilter`);
+          //   return;
+          // }
+	  for (const x of this.accessoryFilter) {
+	    if (service.serviceName.search(x) !== -1) {
+              this.log.debug(`Skipping ${service.serviceName} ${service.accessoryInformation['Serial Number']} - matches accessoryFilter`);
+              return;
+	    }
+	  }
 
           // perform user-defined service filters based on serial number
           if (this.accessorySerialFilter.includes(service.accessoryInformation['Serial Number'])) {
@@ -438,7 +461,10 @@ export class Hap {
 	    return;
 	  }
 
-          this.services.set(uniqueId, service);
+	  if (!this.services[uniqueId]) {
+	    this.log.info(`Found service ${service.serviceName}. type:${service.serviceType} address:${service.instance.ipAddress}:${service.instance.port} aid:${service.aid} iid:${service.iid}`);
+	  }
+          this.services[uniqueId] = service;
         });
       // Merge television services into single service. 
       if (televisions.length > 0) {	// should be only one.
@@ -474,7 +500,10 @@ export class Hap {
 	  //this.log.info(televisions[0].extras);
 	}
 	//console.log(`Found television Service: ${JSON.stringify(televisions[0])}`);
-        this.services.set(televisions[0].uniqueId, televisions[0]);
+	if (!this.services[televisions[0].uniqueId]) {
+	  this.log.info(`Found service ${televisions[0].serviceName}. type:${televisions[0].serviceType} address:${televisions[0].instance.ipAddress}:{televisions[0].instance.port} aid:${televisions[0].aid} iid:${televisions[0].iid}`);
+	}
+        this.services[televisions[0].uniqueId] = televisions[0];
       }
     });
   }
@@ -483,7 +512,7 @@ export class Hap {
    * Register hap characteristic event handlers
    */
   async registerCharacteristicEventHandlers() {
-    for (const service of this.services.values()) {
+    for (const service of Object.values(this.services)) {
       // get a list of characteristics we can watch
       const evCharacteristics = service.characteristics.filter(x => x.perms.includes('ev') && this.evTypes.includes(x.type));
 
@@ -533,7 +562,7 @@ export class Hap {
    */
   async handleHapEvent(events) {
     for (const event of events) {
-      const accessories = Array.from(this.services.values()).filter(s =>
+      const accessories = Object.values(this.services).filter(s =>
         s.instance.ipAddress === event.host && s.instance.port === event.port && s.aid === event.aid);
       const service = accessories.find(x => x.characteristics.find(c => c.iid === event.iid));
       if (service) {
@@ -552,7 +581,7 @@ export class Hap {
     const states = {};
 
     for (const uniqueId of pendingStateReport) {
-      const service = this.services.get(uniqueId);
+      const service = this.services[uniqueId];
       states[service.uniqueId] = this.types[service.serviceType].query(service);
     }
 
@@ -563,11 +592,11 @@ export class Hap {
     const states = {};
 
     // don't report state if there are no services
-    if (!this.services.size) {
+    if (!Object.keys(this.services).length) {
       return;
     }
 
-    for (const service of this.services.values()) {
+    for (const service of Object.values(this.services)) {
       states[service.uniqueId] = this.types[service.serviceType].query(service);
     }
     return await this.sendStateReport(states);
