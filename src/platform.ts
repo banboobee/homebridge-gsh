@@ -67,6 +67,12 @@ export class HomebridgeGoogleSmartHome {
       .onGet(() => false)
       .onSet(async (on: CharacteristicValue) => {
 	if (on === true) {
+	  for (const service of Object.values(this.plugin.hap.services)) {
+	    if (service.isUnavailable) {
+	      delete this.plugin.hap.services[service.uniqueId];
+	      this.log.info(`Removed service ${service.serviceName} to sync. type:${service.serviceType} address:${service.instance.ipAddress}:${service.instance.port} aid:${service.aid} iid:${service.iid}.`);
+	    }
+	  }
 	  await this.plugin.hap.requestSync();
 	  setTimeout(() => {
 	    this.accessory.getService(this.api.hap.Service.Switch)
