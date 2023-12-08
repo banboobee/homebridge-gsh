@@ -20,6 +20,9 @@ export class HomebridgeGoogleSmartHome {
   private fakegatoAPI: any;
   private eve: any;
   private historyService: any = null;
+  private syncButtonTimeout: NodeJS.Timeout = undefined;
+  private serviceStatus: CharacteristicValue;
+  private syncButtonStatus: CharacteristicValue;
 
   constructor(
     public log,
@@ -61,12 +64,14 @@ export class HomebridgeGoogleSmartHome {
       .setCharacteristic(this.api.hap.Characteristic.Manufacturer, PLATFORM_NAME)
       .setCharacteristic(this.api.hap.Characteristic.SerialNumber, hostname())
       .setCharacteristic(this.api.hap.Characteristic.FirmwareRevision, version);
+
     const sync = this.accessory.getService(this.api.hap.Service.Switch) ||
                  this.accessory.addService(this.api.hap.Service.Switch, `${google} Sync`);
     sync.getCharacteristic(this.api.hap.Characteristic.On)
-      .onGet(() => false)
+      .onGet(() => this.syncButtonStatus)
       .onSet(async (on: CharacteristicValue) => {
 	if (on === true) {
+	  this.log.warn(`Request Google to sync available services. Lost services will be removed.`);
 	  for (const service of Object.values(this.plugin.hap.services)) {
 	    if (service.isUnavailable) {
 	      delete this.plugin.hap.services[service.uniqueId];
@@ -74,10 +79,24 @@ export class HomebridgeGoogleSmartHome {
 	    }
 	  }
 	  await this.plugin.hap.requestSync();
-	  setTimeout(() => {
-	    this.accessory.getService(this.api.hap.Service.Switch)
-	      .updateCharacteristic(this.api.hap.Characteristic.On, false);
-	  }, 1000);
+	}
+      })
+      .on('change', (event: CharacteristicChange) => {
+	if (event.newValue !== event.oldValue) {
+	  //this.log.info(`${this.accessory.displayName}: on change Sync button.`);
+	  this.syncButtonStatus = event.newValue;
+	  if (event.newValue) {
+	    clearTimeout(this.syncButtonTimeout);
+	    this.syncButtonTimeout = setTimeout(() => {
+	      //this.log.info(`${this.accessory.displayName}: Sync button turned OFF.`);
+	      this.accessory.getService(this.api.hap.Service.Switch)
+		.updateCharacteristic(this.api.hap.Characteristic.On, false);
+	    }, 1000);
+	  }
+          this.historyService.addEntry({
+            time: Math.round(new Date().valueOf()/1000),
+            status: event.newValue
+          });
 	}
       });
 
@@ -85,15 +104,6 @@ export class HomebridgeGoogleSmartHome {
 	            this.accessory.addService(this.api.hap.Service.ContactSensor, `${google} Contact`);
     contact.setCharacteristic(this.api.hap.Characteristic.ContactSensorState,
 			     this.api.hap.Characteristic.ContactSensorState.CONTACT_NOT_DETECTED);
-    this.historyService = new this.fakegatoAPI('door', this.accessory,
-	       {log: this.log, storage: 'fs',
-		filename: `${hostname().split(".")[0]}_${PLUGIN_NAME}_persist.json`
-	       });
-    this.historyService.addEntry(
-      {time: Math.round(new Date().valueOf()/1000),
-       status: this.api.hap.Characteristic.ContactSensorState.CONTACT_NOT_DETECTED
-      });
-    
     contact.addOptionalCharacteristic(this.eve.Characteristics.OpenDuration);
     contact.getCharacteristic(this.eve.Characteristics.OpenDuration).onGet(() => 0);
     contact.addOptionalCharacteristic(this.eve.Characteristics.ClosedDuration);
@@ -127,14 +137,15 @@ export class HomebridgeGoogleSmartHome {
       .on('change', (event: CharacteristicChange) => {
 	if (event.newValue !== event.oldValue) {
 	  this.log.debug(`${this.accessory.displayName}: ContactSensor state on change: ${JSON.stringify(event)}`);
+	  this.serviceStatus = event.newValue;
 	  const sensor = this.accessory.getService(this.api.hap.Service.ContactSensor);
           const entry = {
             time: Math.round(new Date().valueOf()/1000),
-            status: event.newValue
+            contact: event.newValue
           };
           this.accessory.context.lastActivation = entry.time;
           sensor?.updateCharacteristic(this.eve.Characteristics.LastActivation, Math.max(0, this.accessory.context.lastActivation - this.historyService.getInitialTime()));
-          if (entry.status) {
+          if (entry.contact) {
 	    this.accessory.context.timesOpened = (this.accessory.context.timesOpened || 0) + 1;
             sensor?.updateCharacteristic(this.eve.Characteristics.TimesOpened, this.accessory.context.timesOpened);
           }
@@ -142,6 +153,24 @@ export class HomebridgeGoogleSmartHome {
 	}
       });
 
+    this.historyService = new this.fakegatoAPI('custom', this.accessory,
+	       {log: this.log, storage: 'fs',
+		filename: `${hostname().split(".")[0]}_${PLUGIN_NAME}_persist.json`
+	       });
+    this.syncButtonStatus = false;
+    this.serviceStatus = this.api.hap.Characteristic.ContactSensorState.CONTACT_NOT_DETECTED;
+    this.updateHistory();
+    
     this.plugin = new Plugin(this, homebridgeConfig);
+  }
+
+  async updateHistory(): Promise<void> {
+    this.historyService.addEntry({
+      time: Math.round(new Date().valueOf() / 1000),
+      contact: this.serviceStatus,
+      status: this.syncButtonStatus})
+    setTimeout(() => {
+      this.updateHistory();
+    }, 10 * 60 * 1000);
   }
 }

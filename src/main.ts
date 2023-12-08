@@ -55,6 +55,9 @@ export class Plugin {
     });
 
     socket.on('json', async (req) => {
+      platform.accessory.getService(platform.api.hap.Service.Switch)
+	.updateCharacteristic(platform.api.hap.Characteristic.On, true);
+      
       if (req.serverMessage) {
         this.log.warn(req.serverMessage);
       }
