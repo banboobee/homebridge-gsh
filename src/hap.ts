@@ -105,6 +105,9 @@ export class Hap {
     this.pin = pin;
     //this.services = {};
     this.services = this.plugin.platform.accessory.context.services;
+    for (const service of Object.values(this.services)) {
+      this.log.info(`Restored service ${service.serviceName}. type:${service.serviceType} address:${service.instance.ipAddress}:${service.instance.port} aid:${service.aid} iid:${service.iid}`);
+    }
 
     this.accessoryFilter = config.accessoryFilter || [];
     this.accessorySerialFilter = config.accessorySerialFilter || [];
@@ -611,6 +614,9 @@ export class Hap {
    * @param requestId
    */
   async sendStateReport(states, requestId?) {
+    // this.plugin.platform.accessory.getService(this.plugin.platform.api.hap.Service.Switch)
+    //   .updateCharacteristic(this.plugin.platform.api.hap.Characteristic.On, true);
+    
     const payload = {
       requestId,
       type: 'report-state',
