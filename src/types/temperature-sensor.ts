@@ -9,12 +9,24 @@ export class TemperatureSensor {
   ) { }
 
   sync(service: HapService): SmartHomeV1SyncDevices {
+    let traits = [
+      'action.devices.traits.TemperatureControl',
+    ];
+    let attributes = {
+      queryOnlyTemperatureControl: true,
+      temperatureUnitForUX: this.hap.config.forceFahrenheit ? 'F' : 'C',
+    } as any;
+    if (service.characteristics.find(x => x.type === Characteristic.CurrentRelativeHumidity)) {
+      traits.push('action.devices.traits.HumiditySetting');
+      attributes['queryOnlyHumiditySetting'] = true;
+    }
+    //console.log(JSON.stringify(traits));
+    //console.log(JSON.stringify(attributes, null, 2));
+    
     return {
       id: service.uniqueId,
       type: 'action.devices.types.SENSOR',
-      traits: [
-        'action.devices.traits.TemperatureControl',
-      ],
+      traits: traits,
       name: {
         defaultNames: [
           service.serviceName,
@@ -24,10 +36,7 @@ export class TemperatureSensor {
         nicknames: [],
       },
       willReportState: true,
-      attributes: {
-        queryOnlyTemperatureControl: true,
-        temperatureUnitForUX: this.hap.config.forceFahrenheit ? 'F' : 'C',
-      },
+      attributes: attributes,
       deviceInfo: {
         manufacturer: service.accessoryInformation.Manufacturer,
         model: service.accessoryInformation.Model,
@@ -45,11 +54,17 @@ export class TemperatureSensor {
   }
 
   query(service: HapService) {
-    return {
+    let response = {
       online: true,
       temperatureSetpointCelsius: service.characteristics.find(x => x.type === Characteristic.CurrentTemperature)?.value,
       temperatureAmbientCelsius: service.characteristics.find(x => x.type === Characteristic.CurrentTemperature)?.value,
     } as any;
+    if (service.characteristics.find(x => x.type === Characteristic.CurrentRelativeHumidity)) {
+      response['humidityAmbientPercent'] = service.characteristics.find(x => x.type === Characteristic.CurrentRelativeHumidity)?.value;
+    }
+    //console.log(response);
+
+    return response;
   }
 
   execute(service: HapService, command: SmartHomeV1ExecuteRequestCommands): AccessoryTypeExecuteResponse {
