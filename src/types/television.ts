@@ -40,8 +40,8 @@ export class Television {
       attributes.availableChannels = [];
       for (const c of service.extras.channels) {
 	let n = [c.ConfiguredName], a;
-	if (a = service.extras.channelAliases?.find(x => x[c.ConfiguredName])) {
-	  for (const x of a[c.ConfiguredName]) {
+	if (a = service.extras.channelAlias?.find(x => x.channel === c.ConfiguredName)) {
+	  for (const x of a.alias) {
 	    n.push(x);
 	  }
 	}

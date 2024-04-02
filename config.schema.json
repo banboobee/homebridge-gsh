@@ -69,6 +69,27 @@
       "forceFahrenheit": {
         "title": "Force Degrees Fahrenheit",
         "type": "boolean"
+      },
+      "channelAlias": {
+        "title": "Channel Alias",
+        "type": "array",
+        "items": {
+          "type": "object",
+	  "properties": {
+	    "channel": {
+              "title": "Channel",
+              "type": "string"
+	    },
+	    "alias": {
+              "title": "Alias",
+              "type": "array",
+	      "items": {
+		"title": "Alias",
+		"type": "string"
+	      }
+	    }
+	  }
+        }
       }
     }
   },
@@ -178,7 +199,46 @@
           "type": "help",
           "helpvalue": "<h5>Force Fahrenheit</h5><em class='primary-text'>Some Homebridge thermostat plugins do not correctly report they are using Fahrenheit temperature units. Enabling this option will force all thermostats accessories to display temperature units in Fahrenheit.</em>"
         },
-        "forceFahrenheit"
+        "forceFahrenheit",
+        {
+          "type": "help",
+          "helpvalue": "<h5>Channel Alias</h5><em class='primary-text'>Define aliases of television channel(station) name.</em>"
+        },
+	{
+          "nodescription": true,
+          "notitle": true,
+	  "key": "channelAlias",
+	  "type": "array",
+	  "items": [
+	    {
+              "nodescription": true,
+              "notitle": true,
+	      "key": "channelAlias[].channel",
+              "placeholder": "Enter channel name..."
+	    },
+	    {
+              "nodescription": true,
+              "notitle": true,
+	      "key": "channelAlias[].alias",
+	      "type": "array",
+              "items": [
+                {
+		  "type": "div",
+		  "displayFlex": true,
+		  "flex-direction": "row",
+		  "items": [
+                    {
+                      "key": "channelAlias[].alias[]",
+                      "flex": "1 1 50px",
+                      "notitle": true,
+                      "placeholder": "Enter channel alias..."
+                    }
+		  ]
+		}
+	      ]
+	    }
+	  ]
+	}
       ]
     }
   ]

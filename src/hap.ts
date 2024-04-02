@@ -435,14 +435,16 @@ export class Hap {
           // }
 	  for (const x of this.accessoryFilter) {
 	    if (service.serviceName.search(x) !== -1) {
-              this.log.debug(`Skipping ${service.serviceName} ${service.accessoryInformation['Serial Number']} - matches accessoryFilter`);
+	      if (process.uptime() < 600)
+		this.log.info(`Skipping ${service.serviceName} ${service.accessoryInformation['Serial Number']} - matches accessoryFilter`);
               return;
 	    }
 	  }
 
           // perform user-defined service filters based on serial number
           if (this.accessorySerialFilter.includes(service.accessoryInformation['Serial Number'])) {
-            this.log.debug(`Skipping ${service.serviceName} ${service.accessoryInformation['Serial Number']} - matches accessorySerialFilter'`);
+	    if (process.uptime() < 600)
+              this.log.info(`Skipping ${service.serviceName} ${service.accessoryInformation['Serial Number']} - matches accessorySerialFilter'`);
             return;
           }
 
@@ -486,7 +488,7 @@ export class Hap {
 	if (inputs.length > 0) {
 	  televisions[0].extras = {};
 	  televisions[0].extras.channels = [];
-	  televisions[0].extras.channelAliases = this.config?.channelAliases;
+	  televisions[0].extras.channelAlias = this.config?.channelAlias;
 	  televisions[0].extras.inputs = [];
 	  for (const service of inputs) {
 	    let s = service.characteristics.find(x => x.type == Characteristic.ConfiguredName).value;
