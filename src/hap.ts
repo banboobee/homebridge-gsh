@@ -509,7 +509,7 @@ export class Hap {
 	}
 	//console.log(`Found television Service: ${JSON.stringify(televisions[0])}`);
 	if (!this.services[televisions[0].uniqueId]) {
-	  this.log.info(`Found service ${televisions[0].serviceName}. type:${televisions[0].serviceType} address:${televisions[0].instance.ipAddress}:{televisions[0].instance.port} aid:${televisions[0].aid} iid:${televisions[0].iid}`);
+	  this.log.info(`Found service ${televisions[0].serviceName}. type:${televisions[0].serviceType} address:${televisions[0].instance.ipAddress}:${televisions[0].instance.port} aid:${televisions[0].aid} iid:${televisions[0].iid}`);
 	}
         this.services[televisions[0].uniqueId] = televisions[0];
       }
