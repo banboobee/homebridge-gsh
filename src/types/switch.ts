@@ -9,12 +9,40 @@ export class Switch {
   }
 
   sync(service: HapService) {
+    const attributes = {} as any;
+    const traits = [
+      'action.devices.traits.OnOff',
+    ];
+
+    // check if the bulb has the brightness characteristic
+    if (service.characteristics.find(x => x.type === Characteristic.Brightness)) {
+      traits.push('action.devices.traits.Brightness');
+      this.deviceType = 'action.devices.types.LIGHT';
+    }
+
+    // check if the bulb has color
+    if (service.characteristics.find(x => x.type === Characteristic.Hue)) {
+      traits.push('action.devices.traits.ColorSetting');
+      attributes.colorModel = 'hsv';
+      attributes.colorTemp;
+      this.deviceType = 'action.devices.types.LIGHT';
+    }
+
+    if (service.characteristics.find(x => x.type === Characteristic.ColorTemperature)) {
+      traits.push('action.devices.traits.ColorSetting');
+      attributes.colorTemperatureRange = {
+        temperatureMinK: 2000,
+        temperatureMaxK: 6000,
+      };
+      attributes.commandOnlyColorSetting = false;
+      this.deviceType = 'action.devices.types.LIGHT';
+    }
+
     return {
       id: service.uniqueId,
+      traits,
+      attributes,
       type: this.deviceType,
-      traits: [
-        'action.devices.traits.OnOff',
-      ],
       name: {
         defaultNames: [
           service.serviceName,
@@ -39,10 +67,38 @@ export class Switch {
   }
 
   query(service: HapService) {
-    return {
+    const response = {
       on: service.characteristics.find(x => x.type === Characteristic.On).value ? true : false,
       online: true,
-    };
+    } as any;
+
+    // check if the bulb has the brightness characteristic
+    if (service.characteristics.find(x => x.type === Characteristic.Brightness)) {
+      response.brightness = service.characteristics.find(x => x.type === Characteristic.Brightness).value;
+    }
+
+    // check if the bulb has color
+    if (service.characteristics.find(x => x.type === Characteristic.Hue)) {
+      response.color = {
+        spectrumHsv: {
+          hue: service.characteristics.find(x => x.type === Characteristic.Hue).value,
+          saturation: service.characteristics.find(x => x.type === Characteristic.Saturation).value / 100,
+          value: 1,
+        },
+      };
+    }
+
+    // check if the bulb has cct
+    if (service.characteristics.find(x => x.type === Characteristic.ColorTemperature)) {
+      const min = service.characteristics.find(x => x.type === Characteristic.ColorTemperature).minValue;
+      const max = service.characteristics.find(x => x.type === Characteristic.ColorTemperature).maxValue;
+      const value = (max - min) - (service.characteristics.find(x => x.type === Characteristic.ColorTemperature).value - min) + min;
+      response.color = {
+        temperatureK: 2000 + (6000 - 2000) * ((value - min) / (max - min)),
+      };
+    }
+
+    return response;
   }
 
   execute(service: HapService, command): AccessoryTypeExecuteResponse {
@@ -59,6 +115,50 @@ export class Switch {
             value: command.execution[0].params.on,
           }],
         };
+        return { payload };
+      }
+      case ('action.devices.commands.BrightnessAbsolute'): {
+        const payload = {
+          characteristics: [{
+            aid: service.aid,
+            iid: service.characteristics.find(x => x.type === Characteristic.Brightness).iid,
+            value: command.execution[0].params.brightness,
+          },
+          {
+            aid: service.aid,
+            iid: service.characteristics.find(x => x.type === Characteristic.On).iid,
+            value: command.execution[0].params.brightness ? true : false,
+          }],
+        };
+        return { payload };
+      }
+      case ('action.devices.commands.ColorAbsolute'): {
+
+        const payload = { characteristics: [] };
+
+        if (command.execution[0].params.color.spectrumHSV) {
+          payload.characteristics.push({
+            aid: service.aid,
+            iid: service.characteristics.find(x => x.type === Characteristic.Hue).iid,
+            value: command.execution[0].params.color.spectrumHSV.hue,
+          }, {
+            aid: service.aid,
+            iid: service.characteristics.find(x => x.type === Characteristic.Saturation).iid,
+            value: command.execution[0].params.color.spectrumHSV.saturation * 100,
+          });
+        }
+
+        if (command.execution[0].params.color.temperature) {
+          const min = service.characteristics.find(x => x.type === Characteristic.ColorTemperature).minValue;
+          const max = service.characteristics.find(x => x.type === Characteristic.ColorTemperature).maxValue;
+          const value = command.execution[0].params.color.temperature;
+          const hbAccessoryValue = min + (max - min) * ((value - 2000) / (6000 - 2000));
+          payload.characteristics.push({
+            aid: service.aid,
+            iid: service.characteristics.find(x => x.type === Characteristic.ColorTemperature).iid,
+            value: (max - min) - (hbAccessoryValue - min) + min,
+          });
+        }
         return { payload };
       }
     }
